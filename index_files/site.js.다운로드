@@ -1,0 +1,208 @@
+var layoutsClosers = [];
+async function getCoordsAsync() {
+    var result =  {
+      lat: 37.5666805,
+      lng: 126.9784147
+    };
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject);
+      });
+      result.lat = pos.coords.latitude;
+      result.lng = pos.coords.longitude;
+    }catch {
+    }finally {
+      return result;
+    }
+  }
+
+window.ui = {
+    modal(targetId, options) {
+        return new Modal(document.getElementById(targetId), options);
+    },
+    sandbox(selector = ".sandbox"){
+        const sandboxEles = document.querySelectorAll(selector);
+            const changeElList = ['img', 'table'];
+            if (document.documentElement.clientWidth < 660) {
+                changeElList.forEach((el) => {
+                    Array.from(sandboxEles[0].getElementsByTagName(el)).forEach((item) => {
+                        item.removeAttribute('width');
+                    });
+                });
+            }
+            if (sandboxEles.length > 0 && window.ShadowRoot) {
+                for (let i = 0, len = sandboxEles.length; i < len; i++) {
+                    const e = sandboxEles[i];
+                    e.innerHTML = e.innerHTML.replace(/fixed/gi, 'relateve');
+
+                    const s = e.parentElement.attachShadow({ mode: 'open' });
+                    const style = document.createElement('style');                    
+                    style.appendChild(
+                        document.createTextNode('* { white-space: pre-line !important; word-break: break-word; }'),
+                    );
+                    style.appendChild(document.createTextNode('img, table, iframe{ max-width: 100% !important; }'));
+                    style.appendChild(document.createTextNode('p{ margin:0; padding:0; }'));
+                    s.appendChild(style);
+
+                    const t = document.createElement('div');
+                    t.style.overflow = 'hidden';
+                    t.appendChild(e);
+
+                    s.appendChild(t);
+                }
+            }
+    },    
+    collapse(selector = ".dropdown") {
+        var collapses = [];
+        document.querySelectorAll(`${selector}:not(.collapse-inited)`).forEach((ele) => {
+            var collapse = new Collapse(ele);
+            document.querySelectorAll(`[data-collapse-toggle='${ele.id}']`).forEach(trigger => {
+                trigger.onclick= function() {
+                    collapse.toggle();
+                    if(ele.classList.contains('hidden')){
+                        var icon = trigger.querySelector('[data-collapse-icon]');
+                        if(icon){
+                            icon.classList.remove('rotate-180');
+                        }
+                    }else{
+                        var icon = trigger.querySelector('[data-collapse-icon]');
+                        if(icon){
+                            icon.classList.add('rotate-180');
+                        }
+                    }
+                }
+            });
+            document.querySelectorAll(`[data-collapse-close='${ele.id}']`).forEach(trigger => {
+                trigger.onclick= function() {
+                    collapse.collapse();
+                    if(ele.classList.contains('hidden')){
+                        var icon = trigger.querySelector('[data-collapse-icon]');
+                        if(icon){
+                            icon.classList.remove('rotate-180');
+                        }
+                    }else{
+                        var icon = trigger.querySelector('[data-collapse-icon]');
+                        if(icon){
+                            icon.classList.add('rotate-180');
+                        }
+                    }
+                }
+            });
+            document.querySelectorAll(`[data-collapse-open='${ele.id}']`).forEach(trigger => {
+                trigger.onclick= function() {
+                    collapse.expand();
+                    if(ele.classList.contains('hidden')){
+                        var icon = trigger.querySelector('[data-collapse-icon]');
+                        if(icon){
+                            icon.classList.remove('rotate-180');
+                        }
+                    }else{
+                        var icon = trigger.querySelector('[data-collapse-icon]');
+                        if(icon){
+                            icon.classList.add('rotate-180');
+                        }
+                    }
+                }
+            });
+            ele.classList.add('collapse-inited');   
+            collapses.push(collapse);
+            if(ele.dataset.collapseDefault){
+                if(ele.dataset.collapseDefault === 'open'){
+                    collapse.expand();
+                }else if(ele.dataset.collapseDefault === 'open'){
+                    collapse.collapse();
+                }
+            }
+        })
+        return collapses;
+    },
+    closeMapCustomLayouts() {
+        if(layoutsClosers.length){
+          layoutsClosers.forEach(layoutsCloser => {
+            layoutsCloser();
+          });
+        }
+    },
+    async createMap(elemetId) {
+        var result = {
+          map : null,
+          clusterer : null,
+          async setCustomMarker(data){
+            var self = this;
+            var customOverlay = new kakao.maps.CustomOverlay({});
+            self.map.setLevel(13);
+            self.map.relayout();
+            self.map.setCenter(new kakao.maps.LatLng(36.2683, 127.6358));
+            self.clusterer.clear();
+            var markers = data.map((p) => {
+              var position = new kakao.maps.LatLng(p.lat, p.lng);
+              var marker = new kakao.maps.Marker({position});
+              var content = 
+              `
+              <div class="absolute w-64 h-20 -ml-32">
+                <div class="bg-white border rounded-lg p-2">
+                  <a class="text-primary-600" target="_blank" href="/camps/${p.id}">
+                    <div class="whitespace-normal leading-tight">
+                      ${p.title}
+                    </div>
+                  </a>
+                  <div class="flex justify-between text-sm mt-1">
+                    <div>
+                      <a target="_blank" href="/agencies/${p.subDomain}">기관보기</a>                
+                    </div>
+                    <div>
+                      <button type="button" onclick="ui.closeMapCustomLayouts()">닫기</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              `
+      
+              kakao.maps.event.addListener(marker, 'click', function() {
+                customOverlay.setContent(content);
+                customOverlay.setPosition(marker.getPosition());
+                customOverlay.setMap(self.map);
+              });
+              layoutsClosers.push(function() { customOverlay.setMap(null) })
+              return marker;
+            })
+      
+            self.clusterer.addMarkers(markers);
+          },
+          relayout() {
+            var self = this;
+            getCoordsAsync().then(coords => {
+              self.map.relayout();            
+              self.map.setCenter(new kakao.maps.LatLng(coords.lat, coords.lng));
+            })
+          }
+        }  
+        kakao.maps.load(() => {
+          getCoordsAsync().then(coords => {
+            var lat = coords.lat , lon = coords.lng;
+            var map = new kakao.maps.Map(
+              document.getElementById(elemetId),
+              {
+                center: new kakao.maps.LatLng(lat, lon),
+                level: 8,
+              }
+            );      
+            var clusterer = new kakao.maps.MarkerClusterer({
+              map: map,
+              averageCenter: true,
+              minLevel: 10
+            });
+      
+            result.map = map;
+            result.clusterer = clusterer;
+          });
+        });
+        return result;
+    }
+}
+
+window.addEventListener('message', function({data}) {
+  if(data.url){
+    this.location.href = data.url;
+  }
+});
